@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/quizapp?createDatabaseIfNotExist=true
+    username: root  # Replace with your MySQL username
+    password: 1234  # Replace with your MySQL password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  logging:
+    config: classpath:log4j2.yml
+jwt:
+  secret: kX9pW2qY8zL5mN7vR3tJ0hG4fB6cK8aP #for testing purposes
+  expiration-ms: 86400000
+
+server:
+  port: 8080
+  error:
+    include-message: always
+
+logging:
+  level:
+    root: INFO
+    com.quizapp: DEBUG

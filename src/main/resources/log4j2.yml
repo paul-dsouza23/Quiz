@@ -1,0 +1,31 @@
+Configuration:
+  status: warn
+  Appenders:
+    Console:
+      name: ConsoleAppender
+      target: SYSTEM_OUT
+      PatternLayout:
+        Pattern: "%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n"
+    RollingFile:
+      name: FileAppender
+      fileName: logs/quiz-app.log
+      filePattern: logs/quiz-app-%d{yyyy-MM-dd}.log
+      PatternLayout:
+        Pattern: "%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n"
+      Policies:
+        TimeBasedTriggeringPolicy:
+          interval: 1
+  Loggers:
+    Root:
+      level: info
+      AppenderRef:
+        - ref: ConsoleAppender
+        - ref: FileAppender
+    Logger:
+      - name: com.quizapp.quizapplication
+        level: debug
+        additivity: false
+        AppenderRef:
+          ref: ConsoleAppender
+      - name: org.springframework
+        level: info
