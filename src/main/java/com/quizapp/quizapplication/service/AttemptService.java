@@ -7,11 +7,13 @@ import com.quizapp.quizapplication.dto.UserAnswerResponse;
 import com.quizapp.quizapplication.entity.*;
 import com.quizapp.quizapplication.enums.QuestionType;
 import com.quizapp.quizapplication.enums.Role;
+import com.quizapp.quizapplication.exception.*;
 import com.quizapp.quizapplication.repository.QuizAttemptRepository;
 import com.quizapp.quizapplication.repository.QuizRepository;
 import com.quizapp.quizapplication.repository.UserAnswerRepository;
 import com.quizapp.quizapplication.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +21,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Log4j2
 public class AttemptService {
 
     private final QuizRepository quizRepository;
@@ -26,94 +29,107 @@ public class AttemptService {
     private final UserAnswerRepository answerRepository;
 
 
-
     public ScoreResponse submitAnswers(Long quizId, SubmitAnswerRequest request) {
-        User currentUser = getCurrentUser();
-        Quiz quiz = quizRepository.findById(quizId).orElseThrow(() -> new RuntimeException("Quiz not found"));
+        log.info("Submitting answers for quizId={} by user", quizId);
 
-        if (request.getAnswers().size() != quiz.getQuestions().size()) {
-            throw new RuntimeException("Must answer all questions");
-        }
+        try {
+            User currentUser = getCurrentUser();
+            Quiz quiz = quizRepository.findById(quizId)
+                    .orElseThrow(() -> new QuizNotFoundOrInactiveException("Quiz not found with id " + quizId));
 
-        QuizAttempt attempt = new QuizAttempt();
-        attempt.setUser(currentUser);
-        attempt.setQuiz(quiz);
-        attempt.setTotalQuestions(quiz.getQuestions().size());
-
-        attempt = attemptRepository.save(attempt); // Save to make it persistent
-
-
-
-        int score = 0;
-        for (SubmitAnswerRequest.AnswerEntry entry : request.getAnswers()) {
-            Question question = quiz.getQuestions().stream()
-                    .filter(q -> q.getId().equals(entry.getQuestionId()))
-                    .findFirst().orElseThrow(() -> new RuntimeException("Invalid question ID"));
-
-            UserAnswer userAnswer = new UserAnswer();
-            userAnswer.setAttempt(attempt);
-            userAnswer.setQuestion(question);
-
-            boolean isCorrect = false;
-            if (question.getType() == QuestionType.TEXT) {
-                if (entry.getAnswerText() == null || entry.getAnswerText().length() > 300) {
-                    throw new RuntimeException("Text answer must be under 300 characters");
-                }
-                userAnswer.setAnswerText(entry.getAnswerText());
-                isCorrect = entry.getAnswerText().equalsIgnoreCase(question.getCorrectAnswerText());
-            } else {
-                // Choice types
-                if (entry.getSelectedOptionIds() == null || entry.getSelectedOptionIds().isEmpty()) {
-                    throw new RuntimeException("Options required for choice questions");
-                }
-                userAnswer.setSelectedOptionIds(String.join(",", entry.getSelectedOptionIds().stream().map(String::valueOf).toList()));
-
-                // Check correctness
-                List<Long> correctIds = question.getOptions().stream()
-                        .filter(Option::isCorrect)
-                        .map(Option::getId)
-                        .toList();
-                List<Long> selected = entry.getSelectedOptionIds();
-
-                if (question.getType() == QuestionType.SINGLE_CHOICE && selected.size() != 1) {
-                    throw new RuntimeException("Single choice allows only one selection");
-                }
-
-                isCorrect = selected.containsAll(correctIds) && correctIds.containsAll(selected);
+            if (request.getAnswers().size() != quiz.getQuestions().size()) {
+                throw new InvalidAnswerException("Must answer all questions");
             }
 
-            if (isCorrect) score++;
-            answerRepository.save(userAnswer);
+            QuizAttempt attempt = new QuizAttempt();
+            attempt.setUser(currentUser);
+            attempt.setQuiz(quiz);
+            attempt.setTotalQuestions(quiz.getQuestions().size());
+
+            attempt = attemptRepository.save(attempt);
+
+            int score = 0;
+            for (SubmitAnswerRequest.AnswerEntry entry : request.getAnswers()) {
+                Question question = quiz.getQuestions().stream()
+                        .filter(q -> q.getId().equals(entry.getQuestionId()))
+                        .findFirst()
+                        .orElseThrow(() -> new InvalidAnswerException("Invalid question ID"));
+
+                UserAnswer userAnswer = new UserAnswer();
+                userAnswer.setAttempt(attempt);
+                userAnswer.setQuestion(question);
+
+                boolean isCorrect = false;
+                if (question.getType() == QuestionType.TEXT) {
+                    if (entry.getAnswerText() == null || entry.getAnswerText().length() > 300) {
+                        throw new InvalidAnswerException("Text answer must be under 300 characters");
+                    }
+                    userAnswer.setAnswerText(entry.getAnswerText());
+                    isCorrect = entry.getAnswerText().equalsIgnoreCase(question.getCorrectAnswerText());
+                } else {
+                    if (entry.getSelectedOptionIds() == null || entry.getSelectedOptionIds().isEmpty()) {
+                        throw new InvalidAnswerException("Options required for choice questions");
+                    }
+                    userAnswer.setSelectedOptionIds(String.join(",", entry.getSelectedOptionIds().stream().map(String::valueOf).toList()));
+
+                    List<Long> correctIds = question.getOptions().stream()
+                            .filter(Option::isCorrect)
+                            .map(Option::getId)
+                            .toList();
+                    List<Long> selected = entry.getSelectedOptionIds();
+
+                    if (question.getType() == QuestionType.SINGLE_CHOICE && selected.size() != 1) {
+                        throw new InvalidAnswerException("Single choice allows only one selection");
+                    }
+
+                    isCorrect = selected.containsAll(correctIds) && correctIds.containsAll(selected);
+                }
+
+                if (isCorrect) score++;
+                answerRepository.save(userAnswer);
+            }
+
+            attempt.setScore(score);
+            attemptRepository.save(attempt);
+
+            log.info("Quiz attempt saved successfully. Score: {}/{}", score, attempt.getTotalQuestions());
+
+            ScoreResponse response = new ScoreResponse();
+            response.setScore(score);
+            response.setTotal(attempt.getTotalQuestions());
+            return response;
+
+        } catch (RuntimeException ex) {
+            log.error("Error while submitting answers for quizId={}: {}", quizId, ex.getMessage(), ex);
+            throw ex;
         }
-
-        attempt.setScore(score);
-        attemptRepository.save(attempt); // Update the saved attempt
-
-        ScoreResponse response = new ScoreResponse();
-        response.setScore(score);
-        response.setTotal(attempt.getTotalQuestions());
-        return response;
     }
 
     public List<AttemptResponse> getMyScores() {
         User currentUser = getCurrentUser();
+        log.info("Fetching scores for userId={}", currentUser.getId());
         return mapToAttemptResponses(attemptRepository.findByUser(currentUser));
     }
 
     public List<AttemptResponse> getAllScores() {
         User currentUser = getCurrentUser();
         if (currentUser.getRole() != Role.ADMIN) {
-            throw new RuntimeException("Access denied");
+            log.warn("Access denied for userId={} while fetching all scores", currentUser.getId());
+            throw new AccessDeniedException("Access denied");
         }
         return mapToAttemptResponses(attemptRepository.findAll());
     }
 
     public AttemptResponse getAttemptDetails(Long attemptId) {
         User currentUser = getCurrentUser();
-        QuizAttempt attempt = attemptRepository.findById(attemptId).orElseThrow(() -> new RuntimeException("Attempt not found"));
+        log.info("Fetching attempt details for attemptId={} by userId={}", attemptId, currentUser.getId());
+
+        QuizAttempt attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new AttemptNotFoundException("Attempt not found with id " + attemptId));
 
         if (currentUser.getRole() != Role.ADMIN && !attempt.getUser().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Access denied");
+            log.warn("Unauthorized access attempt. userId={} tried to access attemptId={}", currentUser.getId(), attemptId);
+            throw new AccessDeniedException("Access denied");
         }
 
         return mapToAttemptResponse(attempt);
@@ -141,18 +157,7 @@ public class AttemptService {
         return resp;
     }
 
-//    private User getCurrentUser() {
-//        return ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUser();
-//    }
     private User getCurrentUser() {
-        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        System.out.println("Principal: " + principal.getClass().getName());
-
-        if (!(principal instanceof CustomUserDetails)) {
-            throw new RuntimeException("Invalid user principal");
-        }
-
-        return ((CustomUserDetails) principal).getUser();
+        return ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUser();
     }
-
 }

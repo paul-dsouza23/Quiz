@@ -7,16 +7,19 @@ import com.quizapp.quizapplication.entity.Option;
 import com.quizapp.quizapplication.entity.Question;
 import com.quizapp.quizapplication.entity.Quiz;
 import com.quizapp.quizapplication.enums.QuestionType;
+import com.quizapp.quizapplication.exception.InvalidQuestionException;
+import com.quizapp.quizapplication.exception.QuestionNotFoundOrInactiveException;
+import com.quizapp.quizapplication.exception.QuizNotFoundOrInactiveException;
 import com.quizapp.quizapplication.repository.OptionRepository;
 import com.quizapp.quizapplication.repository.QuestionRepository;
 import com.quizapp.quizapplication.repository.QuizRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
+@Log4j2
 public class QuestionService {
 
     private final QuizRepository quizRepository;
@@ -25,8 +28,10 @@ public class QuestionService {
 
 
     public void addQuestion(Long quizId, AddQuestionRequest request) {
+        log.info("Adding question to quizId={}", quizId);
+
         Quiz quiz = quizRepository.findActiveById(quizId)
-                .orElseThrow(() -> new RuntimeException("Quiz not found or inactive"));
+                .orElseThrow(() -> new QuizNotFoundOrInactiveException("Quiz not found or inactive"));
 
         validateQuestion(request);
 
@@ -49,11 +54,14 @@ public class QuestionService {
                 optionRepository.save(option);
             }
         }
+        log.info("Question added successfully to quizId={}", quizId);
     }
 
     public void updateQuestion(Long questionId, UpdateQuestionRequest request) {
+        log.info("Updating questionId={}", questionId);
+
         Question question = questionRepository.findActiveById(questionId)
-                .orElseThrow(() -> new RuntimeException("Question not found or inactive"));
+                .orElseThrow(() -> new QuestionNotFoundOrInactiveException("Question not found or inactive"));
         validateQuestion(request);
 
         question.setText(request.getText());
@@ -74,31 +82,37 @@ public class QuestionService {
             }
         }
         questionRepository.save(question);
+        log.info("QuestionId={} updated successfully", questionId);
+
     }
 
     public void deleteQuestion(Long questionId) {
+        log.info("Deleting questionId={}", questionId);
+
         Question question = questionRepository.findActiveById(questionId)
-                .orElseThrow(() -> new RuntimeException("Question not found or inactive"));
+                .orElseThrow(() -> new QuestionNotFoundOrInactiveException("Question not found or inactive"));
         question.setActive(false);
         questionRepository.save(question);
+
+        log.info("QuestionId={} marked inactive", questionId);
     }
 
     private void validateQuestion(UpdateQuestionRequest request) {
         QuestionType type = request.getType();
         if (type == QuestionType.SINGLE_CHOICE || type == QuestionType.MULTIPLE_CHOICE) {
             if (request.getOptions() == null || request.getOptions().isEmpty()) {
-                throw new RuntimeException("Options required for choice questions");
+                throw new InvalidQuestionException("Options required for choice questions");
             }
             long correctCount = request.getOptions().stream().filter(AddOptionRequest::isCorrect).count();
             if (type == QuestionType.SINGLE_CHOICE && correctCount != 1) {
-                throw new RuntimeException("Single choice must have exactly one correct option");
+                throw new InvalidQuestionException("Single choice must have exactly one correct option");
             }
             if (type == QuestionType.MULTIPLE_CHOICE && correctCount < 1) {
-                throw new RuntimeException("Multiple choice must have at least one correct option");
+                throw new InvalidQuestionException("Multiple choice must have at least one correct option");
             }
         } else if (type == QuestionType.TEXT) {
             if (request.getCorrectAnswerText() == null || request.getCorrectAnswerText().isBlank()) {
-                throw new RuntimeException("Correct answer text required for text questions");
+                throw new InvalidQuestionException("Correct answer text required for text questions");
             }
         }
     }
@@ -107,19 +121,19 @@ public class QuestionService {
         QuestionType type = request.getType();
         if (type == QuestionType.SINGLE_CHOICE || type == QuestionType.MULTIPLE_CHOICE) {
             if (request.getOptions() == null || request.getOptions().isEmpty()) {
-                throw new RuntimeException("Options required for choice questions");
+                throw new InvalidQuestionException("Options required for choice questions");
             }
             long correctCount = request.getOptions().stream().filter(AddOptionRequest::isCorrect).count();  // Updated to ::isCorrect
             log.info("Question type: {}, correct option count: {}", type, correctCount);
             if (type == QuestionType.SINGLE_CHOICE && correctCount != 1) {
-                throw new RuntimeException("Single choice must have exactly one correct option");
+                throw new InvalidQuestionException("Single choice must have exactly one correct option");
             }
             if (type == QuestionType.MULTIPLE_CHOICE && correctCount < 1) {
-                throw new RuntimeException("Multiple choice must have at least one correct option");
+                throw new InvalidQuestionException("Multiple choice must have at least one correct option");
             }
         } else if (type == QuestionType.TEXT) {
             if (request.getCorrectAnswerText() == null || request.getCorrectAnswerText().isBlank()) {
-                throw new RuntimeException("Correct answer text required for text questions");
+                throw new InvalidQuestionException("Correct answer text required for text questions");
             }
         }
     }

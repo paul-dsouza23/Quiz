@@ -11,7 +11,7 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
   logging:
-    config: classpath:log4j2.yml
+    config: classpath:log4j2.xml
 jwt:
   secret: kX9pW2qY8zL5mN7vR3tJ0hG4fB6cK8aP #for testing purposes
   expiration-ms: 86400000
