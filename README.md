@@ -14,7 +14,6 @@ Welcome to the **Quiz Application Backend**, a Spring Boot-based REST API for ma
   - [Quiz Taking APIs](#quiz-taking-apis)
 - [Security](#security)
 - [Logging](#logging)
-- [Contributing](#contributing)
 
 ## Features
 - **Authentication**: User registration and login with JWT-based authentication.
