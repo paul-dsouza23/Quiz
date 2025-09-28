@@ -93,7 +93,7 @@ public class QuizController {
     public ResponseEntity<?> deleteQuiz(@PathVariable Long id) {
         try {
             quizService.deleteQuiz(id);
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok("Quiz deleted successfully");
 
         } catch (QuizNotFoundOrInactiveException ex) {
             log.warn("Quiz not found or inactive: {}", ex.getMessage());
