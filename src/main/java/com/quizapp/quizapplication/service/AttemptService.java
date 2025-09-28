@@ -53,7 +53,7 @@ public class AttemptService {
                 Question question = quiz.getQuestions().stream()
                         .filter(q -> q.getId().equals(entry.getQuestionId()))
                         .findFirst()
-                        .orElseThrow(() -> new InvalidAnswerException("Invalid question ID"));
+                        .orElseThrow(() -> new InvalidQuestionException("Invalid question ID"));
 
                 UserAnswer userAnswer = new UserAnswer();
                 userAnswer.setAttempt(attempt);
