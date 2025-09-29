@@ -6,15 +6,19 @@ import com.quizapp.quizapplication.dto.UpdateQuestionRequest;
 import com.quizapp.quizapplication.entity.Option;
 import com.quizapp.quizapplication.entity.Question;
 import com.quizapp.quizapplication.entity.Quiz;
+import com.quizapp.quizapplication.entity.User;
 import com.quizapp.quizapplication.enums.QuestionType;
+import com.quizapp.quizapplication.exception.AccessDeniedException;
 import com.quizapp.quizapplication.exception.InvalidQuestionException;
 import com.quizapp.quizapplication.exception.QuestionNotFoundOrInactiveException;
 import com.quizapp.quizapplication.exception.QuizNotFoundOrInactiveException;
 import com.quizapp.quizapplication.repository.OptionRepository;
 import com.quizapp.quizapplication.repository.QuestionRepository;
 import com.quizapp.quizapplication.repository.QuizRepository;
+import com.quizapp.quizapplication.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -32,6 +36,12 @@ public class QuestionService {
 
         Quiz quiz = quizRepository.findActiveById(quizId)
                 .orElseThrow(() -> new QuizNotFoundOrInactiveException("Quiz not found or inactive"));
+
+        User currentUser = getCurrentUser();
+        if (!quiz.getCreatedBy().getId().equals(currentUser.getId())) {
+            log.warn("User id={} tried to add question without permission", currentUser.getId());
+            throw new AccessDeniedException("Only the creator can add the question");
+        }
 
         validateQuestion(request);
 
@@ -64,6 +74,12 @@ public class QuestionService {
                 .orElseThrow(() -> new QuestionNotFoundOrInactiveException("Question not found or inactive"));
         validateQuestion(request);
 
+        User currentUser = getCurrentUser();
+        if (!question.getQuiz().getCreatedBy().getId().equals(currentUser.getId())) {
+            log.warn("User id={} tried to update question id={} without permission", currentUser.getId(), questionId);
+            throw new AccessDeniedException("Only the creator can update the question");
+        }
+
         question.setText(request.getText());
         question.setType(request.getType());
         question.setCorrectAnswerText(request.getType() == QuestionType.TEXT ? request.getCorrectAnswerText() : null);
@@ -91,6 +107,13 @@ public class QuestionService {
 
         Question question = questionRepository.findActiveById(questionId)
                 .orElseThrow(() -> new QuestionNotFoundOrInactiveException("Question not found or inactive"));
+
+        User currentUser = getCurrentUser();
+        if (!question.getQuiz().getCreatedBy().getId().equals(currentUser.getId())) {
+            log.warn("User id={} tried to delete question id={} without permission", currentUser.getId(), questionId);
+            throw new AccessDeniedException("Only the creator can delete the question");
+        }
+
         question.setActive(false);
         questionRepository.save(question);
 
@@ -136,5 +159,9 @@ public class QuestionService {
                 throw new InvalidQuestionException("Correct answer text required for text questions");
             }
         }
+    }
+
+    private User getCurrentUser() {
+        return ((CustomUserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUser();
     }
 }
